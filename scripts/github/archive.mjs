@@ -74,7 +74,7 @@ async function fetchAllNotificationsWithRetry() {
       await checkRateLimit();
       return await octokit.paginate(
         octokit.activity.listNotificationsForAuthenticatedUser,
-        { per_page: 50, all: false, participating: false }
+        { per_page: 50, all: true, participating: false }
       );
     } catch (err) {
       if (

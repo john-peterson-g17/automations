@@ -1,4 +1,4 @@
-name: Auto Unsubscribe from GitHub Notifications
+name: Auto Archive GitHub Notifications
 
 on:
   #   schedule:
@@ -24,4 +24,4 @@ jobs:
         run: npm install
 
       - name: Run Script
-        run: node ./scripts/unsubscribe.mjs
+        run: node ./scripts/github/archive.mjs

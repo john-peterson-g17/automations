@@ -22,23 +22,24 @@ async function checkRateLimit() {
 
   if (remaining < 10) {
     const waitTime = Math.max(reset * 1000 - Date.now(), 0);
-    console.log(
-      `⏳ Rate limit low, sleeping for ${Math.ceil(waitTime / 1000)}s`
-    );
+    console.log(`⏳ Rate limit low, sleeping for ${Math.ceil(waitTime / 1000)}s`);
     await new Promise((res) => setTimeout(res, waitTime));
   }
 }
 
 async function processNotification(notif) {
-  const { subject, repository, id: threadId } = notif;
+  const { subject, repository, id: threadId, reason } = notif;
   const { type, title, url: subjectUrl } = subject;
 
   if (!["Issue", "PullRequest"].includes(type)) return;
 
+  if (reason === "mention") {
+    console.log(`🔔 Skipping mention: ${title}`);
+    return false;
+  }
+
   try {
-    const match = subjectUrl.match(
-      /repos\/([^/]+)\/([^/]+)\/(issues|pulls)\/(\d+)/
-    );
+    const match = subjectUrl.match(/repos\/([^/]+)\/([^/]+)\/(issues|pulls)\/(\d+)/);
     if (!match) return;
 
     const [, owner, repo, resource, number] = match;
@@ -66,35 +67,11 @@ async function processNotification(notif) {
     }
 
     if (state === "closed" || merged) {
-      let isSubscribed = false;
-
-      try {
-        const { data: subscription } =
-          await octokit.activity.getThreadSubscriptionForAuthenticatedUser({
-            thread_id: threadId,
-          });
-        isSubscribed = subscription.subscribed;
-      } catch (err) {
-        if (err.status === 404) {
-          console.log(`⏩ No subscription exists for ${type}: ${title}`);
-          return false;
-        } else {
-          throw err;
-        }
-      }
-
-      if (!isSubscribed) {
-        console.log(`⏩ Already unsubscribed from ${type}: ${title}`);
-        return false;
-      }
-
-      await octokit.activity.deleteThreadSubscription({ thread_id: threadId });
-      console.log(`🔕 Unsubscribed from ${type}: ${title} (${owner}/${repo})`);
+      await octokit.activity.markThreadAsRead({ thread_id: threadId });
+      console.log(`📪 Archived ${type}: ${title} (${owner}/${repo})`);
       return true;
     } else {
-      console.log(
-        `✅ Kept ${type}: ${title} (state=${state}, merged=${merged})`
-      );
+      console.log(`✅ Kept ${type}: ${title} (state=${state}, merged=${merged})`);
     }
   } catch (err) {
     console.warn(`⚠️ Error processing ${title}: ${err.message}`);
@@ -103,8 +80,8 @@ async function processNotification(notif) {
   return false;
 }
 
-async function autoUnsubscribe() {
-  console.log("📬 Fetching all notifications...");
+async function autoArchive() {
+  console.log("📬 Fetching all inbox notifications...");
 
   const allNotifications = await octokit.paginate(
     octokit.activity.listNotificationsForAuthenticatedUser,
@@ -113,19 +90,19 @@ async function autoUnsubscribe() {
 
   console.log(`🔍 Found ${allNotifications.length} notifications`);
 
-  let unsubscribed = 0;
+  let archived = 0;
 
   const tasks = allNotifications.map((notif) =>
     limit(() =>
       processNotification(notif).then((success) => {
-        if (success) unsubscribed++;
+        if (success) archived++;
       })
     )
   );
 
   await Promise.all(tasks);
 
-  console.log(`\n🚀 Done. Unsubscribed from ${unsubscribed} threads.`);
+  console.log(`\n🚀 Done. Archived ${archived} closed/merged threads (excluding mentions).`);
 }
 
-autoUnsubscribe();
+autoArchive();

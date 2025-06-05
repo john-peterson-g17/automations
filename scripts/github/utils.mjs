@@ -1,4 +1,15 @@
 import { Octokit } from "@octokit/rest";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const token = process.env.GITHUB_TOKEN;
+
+if (!token) {
+  console.error("❌ Missing GITHUB_TOKEN in environment variables or .env");
+  process.exit(1);
+}
+
 export const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
 const MAX_RETRIES = 10;

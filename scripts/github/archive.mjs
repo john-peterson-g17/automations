@@ -1,18 +1,6 @@
-import { Octokit } from "@octokit/rest";
-import dotenv from "dotenv";
 import pLimit from "p-limit";
 import { octokit, checkRateLimit } from "./utils.mjs";
 
-dotenv.config();
-
-const token = process.env.GITHUB_TOKEN;
-
-if (!token) {
-  console.error("❌ Missing GITHUB_TOKEN in environment variables or .env");
-  process.exit(1);
-}
-
-const octokit = new Octokit({ auth: token });
 const CONCURRENCY = 5;
 const limit = pLimit(CONCURRENCY);
 

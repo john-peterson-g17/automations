@@ -1,18 +1,6 @@
-import { Octokit } from "@octokit/rest";
-import dotenv from "dotenv";
 import pLimit from "p-limit";
 import { octokit, checkRateLimit } from "./utils.mjs";
 
-dotenv.config();
-
-const token = process.env.GITHUB_TOKEN;
-
-if (!token) {
-  console.error("❌ Missing GITHUB_TOKEN in environment variables or .env");
-  process.exit(1);
-}
-
-const octokit = new Octokit({ auth: token });
 const CONCURRENCY = 5;
 const limit = pLimit(CONCURRENCY);
 
@@ -50,10 +38,17 @@ async function fetchAllNotificationsWithRetry() {
         { per_page: 50, all: false, participating: false }
       );
     } catch (err) {
-      if (err.status === 403 && err.message.includes("API rate limit exceeded")) {
+      if (
+        err.status === 403 &&
+        err.message.includes("API rate limit exceeded")
+      ) {
         const { data } = await octokit.rateLimit.get();
         const waitTime = Math.max(data.rate.reset * 1000 - Date.now(), 0);
-        console.warn(`⏳ Rate limit exceeded. Waiting ${Math.ceil(waitTime / 1000)}s to retry...`);
+        console.warn(
+          `⏳ Rate limit exceeded. Waiting ${Math.ceil(
+            waitTime / 1000
+          )}s to retry...`
+        );
         await new Promise((res) => setTimeout(res, waitTime));
       } else {
         throw err;
@@ -81,7 +76,9 @@ async function autoUnsubscribe() {
 
   await Promise.all(tasks);
 
-  console.log(`\n🚀 Done. Unsubscribed from ${unsubscribed} threads (excluding mentions).`);
+  console.log(
+    `\n🚀 Done. Unsubscribed from ${unsubscribed} threads (excluding mentions).`
+  );
 }
 
 autoUnsubscribe();

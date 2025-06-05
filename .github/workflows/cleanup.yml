@@ -1,0 +1,16 @@
+name: GitHub Notification Cleanup
+
+on:
+  workflow_dispatch:
+
+jobs:
+  archive:
+    uses: ./.github/workflows/archive.yml
+    secrets:
+      WORKFLOW_GITHUB_TOKEN: ${{ secrets.WORKFLOW_GITHUB_TOKEN }}
+
+  unsubscribe:
+    needs: archive
+    uses: ./.github/workflows/unsubscribe.yml
+    secrets:
+      WORKFLOW_GITHUB_TOKEN: ${{ secrets.WORKFLOW_GITHUB_TOKEN }}

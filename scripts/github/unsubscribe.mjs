@@ -1,6 +1,7 @@
 import { Octokit } from "@octokit/rest";
 import dotenv from "dotenv";
 import pLimit from "p-limit";
+import { octokit, checkRateLimit } from "./utils.mjs";
 
 dotenv.config();
 
@@ -14,20 +15,6 @@ if (!token) {
 const octokit = new Octokit({ auth: token });
 const CONCURRENCY = 5;
 const limit = pLimit(CONCURRENCY);
-
-async function checkRateLimit() {
-  const { data } = await octokit.rateLimit.get();
-  const remaining = data.rate.remaining;
-  const reset = data.rate.reset;
-
-  if (remaining < 10) {
-    const waitTime = Math.max(reset * 1000 - Date.now(), 0);
-    console.log(
-      `⏳ Rate limit low, sleeping for ${Math.ceil(waitTime / 1000)}s`
-    );
-    await new Promise((res) => setTimeout(res, waitTime));
-  }
-}
 
 async function processUnsubscribe(notif) {
   const { subject, id: threadId, reason } = notif;
@@ -54,13 +41,31 @@ async function processUnsubscribe(notif) {
   }
 }
 
+async function fetchAllNotificationsWithRetry() {
+  while (true) {
+    try {
+      await checkRateLimit();
+      return await octokit.paginate(
+        octokit.activity.listNotificationsForAuthenticatedUser,
+        { per_page: 50, all: false, participating: false }
+      );
+    } catch (err) {
+      if (err.status === 403 && err.message.includes("API rate limit exceeded")) {
+        const { data } = await octokit.rateLimit.get();
+        const waitTime = Math.max(data.rate.reset * 1000 - Date.now(), 0);
+        console.warn(`⏳ Rate limit exceeded. Waiting ${Math.ceil(waitTime / 1000)}s to retry...`);
+        await new Promise((res) => setTimeout(res, waitTime));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
 async function autoUnsubscribe() {
   console.log("📬 Fetching all inbox notifications...");
 
-  const allNotifications = await octokit.paginate(
-    octokit.activity.listNotificationsForAuthenticatedUser,
-    { per_page: 50, all: false, participating: false }
-  );
+  const allNotifications = await fetchAllNotificationsWithRetry();
 
   console.log(`🔍 Found ${allNotifications.length} notifications`);
 
@@ -76,9 +81,7 @@ async function autoUnsubscribe() {
 
   await Promise.all(tasks);
 
-  console.log(
-    `\n🚀 Done. Unsubscribed from ${unsubscribed} threads (excluding mentions).`
-  );
+  console.log(`\n🚀 Done. Unsubscribed from ${unsubscribed} threads (excluding mentions).`);
 }
 
 autoUnsubscribe();

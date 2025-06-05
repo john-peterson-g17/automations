@@ -74,6 +74,9 @@ This script archives (marks as read) notifications related to closed issues or m
 - Uses GitHub's REST API with pagination and rate-limit awareness
 - Runs in parallel (default: 5 at a time)
 
+> [!NOTE]
+> Archive in this case means marking as `done`
+
 #### ⚙️ Requirements
 
 - A **classic GitHub personal access token (PAT)** with at least:

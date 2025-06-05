@@ -1,6 +1,7 @@
 import { Octokit } from "@octokit/rest";
 import dotenv from "dotenv";
 import pLimit from "p-limit";
+import { octokit, checkRateLimit } from "./utils.mjs";
 
 dotenv.config();
 
@@ -15,16 +16,11 @@ const octokit = new Octokit({ auth: token });
 const CONCURRENCY = 5;
 const limit = pLimit(CONCURRENCY);
 
-async function checkRateLimit() {
-  const { data } = await octokit.rateLimit.get();
-  const remaining = data.rate.remaining;
-  const reset = data.rate.reset;
-
-  if (remaining < 10) {
-    const waitTime = Math.max(reset * 1000 - Date.now(), 0);
-    console.log(`⏳ Rate limit low, sleeping for ${Math.ceil(waitTime / 1000)}s`);
-    await new Promise((res) => setTimeout(res, waitTime));
-  }
+async function markThreadAsDone(threadId) {
+  await octokit.request("PATCH /notifications/threads/{thread_id}", {
+    thread_id: threadId,
+    reason: "done",
+  });
 }
 
 async function processNotification(notif) {
@@ -39,7 +35,9 @@ async function processNotification(notif) {
   }
 
   try {
-    const match = subjectUrl.match(/repos\/([^/]+)\/([^/]+)\/(issues|pulls)\/(\d+)/);
+    const match = subjectUrl.match(
+      /repos\/([^/]+)\/([^/]+)\/(issues|pulls)\/(\d+)/
+    );
     if (!match) return;
 
     const [, owner, repo, resource, number] = match;
@@ -67,11 +65,13 @@ async function processNotification(notif) {
     }
 
     if (state === "closed" || merged) {
-      await octokit.activity.markThreadAsRead({ thread_id: threadId });
-      console.log(`📪 Archived ${type}: ${title} (${owner}/${repo})`);
+      await markThreadAsDone(threadId);
+      console.log(`📪 Marked as done: ${type}: ${title} (${owner}/${repo})`);
       return true;
     } else {
-      console.log(`✅ Kept ${type}: ${title} (state=${state}, merged=${merged})`);
+      console.log(
+        `✅ Kept ${type}: ${title} (state=${state}, merged=${merged})`
+      );
     }
   } catch (err) {
     console.warn(`⚠️ Error processing ${title}: ${err.message}`);
@@ -80,13 +80,38 @@ async function processNotification(notif) {
   return false;
 }
 
+async function fetchAllNotificationsWithRetry() {
+  while (true) {
+    try {
+      await checkRateLimit();
+      return await octokit.paginate(
+        octokit.activity.listNotificationsForAuthenticatedUser,
+        { per_page: 50, all: false, participating: false }
+      );
+    } catch (err) {
+      if (
+        err.status === 403 &&
+        err.message.includes("API rate limit exceeded")
+      ) {
+        const { data } = await octokit.rateLimit.get();
+        const waitTime = Math.max(data.rate.reset * 1000 - Date.now(), 0);
+        console.warn(
+          `⏳ Rate limit exceeded. Waiting ${Math.ceil(
+            waitTime / 1000
+          )}s to retry...`
+        );
+        await new Promise((res) => setTimeout(res, waitTime));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
 async function autoArchive() {
   console.log("📬 Fetching all inbox notifications...");
 
-  const allNotifications = await octokit.paginate(
-    octokit.activity.listNotificationsForAuthenticatedUser,
-    { per_page: 50, all: false, participating: false }
-  );
+  const allNotifications = await fetchAllNotificationsWithRetry();
 
   console.log(`🔍 Found ${allNotifications.length} notifications`);
 
@@ -102,7 +127,9 @@ async function autoArchive() {
 
   await Promise.all(tasks);
 
-  console.log(`\n🚀 Done. Archived ${archived} closed/merged threads (excluding mentions).`);
+  console.log(
+    `\n🚀 Done. Marked ${archived} closed/merged threads as done (excluding mentions).`
+  );
 }
 
 autoArchive();

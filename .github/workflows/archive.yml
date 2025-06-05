@@ -1,15 +1,14 @@
-name: Auto Archive GitHub Notifications
+name: Archive Github Notifications
 
 on:
-  #   schedule:
-  #     - cron: "*/30 * * * *"
-  workflow_dispatch: # Allow manual trigger
+  workflow_call:
+  workflow_dispatch:
 
 env:
   GITHUB_TOKEN: ${{ secrets.WORKFLOW_GITHUB_TOKEN }}
 
 jobs:
-  unsubscribe:
+  archive:
     runs-on: ubuntu-latest
 
     steps:

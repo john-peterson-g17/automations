@@ -66,20 +66,26 @@ async function processNotification(notif) {
     }
 
     if (state === "closed" || merged) {
-      // Check subscription status
+      let isSubscribed = false;
+
       try {
         const { data: subscription } =
-          await octokit.activity.getThreadSubscription({
+          await octokit.activity.getThreadSubscriptionForAuthenticatedUser({
             thread_id: threadId,
           });
-
-        if (!subscription.subscribed) {
-          console.log(`⏩ Already unsubscribed from ${type}: ${title}`);
-          return false;
-        }
+        isSubscribed = subscription.subscribed;
       } catch (err) {
-        // Ignore 404 if not subscribed yet
-        if (err.status !== 404) throw err;
+        if (err.status === 404) {
+          console.log(`⏩ No subscription exists for ${type}: ${title}`);
+          return false;
+        } else {
+          throw err;
+        }
+      }
+
+      if (!isSubscribed) {
+        console.log(`⏩ Already unsubscribed from ${type}: ${title}`);
+        return false;
       }
 
       await octokit.activity.deleteThreadSubscription({ thread_id: threadId });

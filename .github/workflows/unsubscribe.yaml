@@ -1,0 +1,27 @@
+name: Auto Unsubscribe from GitHub Notifications
+
+on:
+  #   schedule:
+  #     - cron: "*/30 * * * *"
+  workflow_dispatch: # Allow manual trigger
+
+env:
+  GITHUB_TOKEN: ${{ secrets.WORKFLOW_GITHUB_TOKEN }}
+
+jobs:
+  unsubscribe:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run Script
+        run: node ./scripts/unsubscribe.mjs

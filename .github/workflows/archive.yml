@@ -2,6 +2,9 @@ name: Archive Github Notifications
 
 on:
   workflow_call:
+    secrets:
+      WORKFLOW_GITHUB_TOKEN:
+        required: true
   workflow_dispatch:
 
 env:
